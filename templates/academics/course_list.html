@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Courses</h2>
+<ul>
+    {% for course in courses %}
+        <li>
+            {{ course.code }} - {{ course.title }} | Credits: {{ course.credits }} | Capacity: {{ course.capacity }}
+            {% if user.role == "admin" %}
+                <a href="{% url 'course_update' course.id %}">Edit</a>
+            {% endif %}
+        </li>
+    {% empty %}
+        <li>No courses.</li>
+    {% endfor %}
+</ul>
+{% endblock %}

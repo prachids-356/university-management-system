@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Exams</h2>
+<ul>
+    {% for exam in exams %}
+        <li>{{ exam.course.code }} - {{ exam.title }} on {{ exam.exam_date }} ({{ exam.total_marks }})</li>
+    {% empty %}
+        <li>No exams.</li>
+    {% endfor %}
+</ul>
+{% endblock %}

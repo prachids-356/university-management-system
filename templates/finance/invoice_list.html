@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Invoices</h2>
+<ul>
+    {% for invoice in invoices %}
+        <li>
+            {{ invoice.student.student_id }} | {{ invoice.amount }} | Due {{ invoice.due_date }} | {{ invoice.status }}
+            {% if user.role == "student" and invoice.status == "pending" %}
+                <a href="{% url 'pay_invoice' invoice.id %}">Pay</a>
+            {% endif %}
+        </li>
+    {% empty %}
+        <li>No invoices.</li>
+    {% endfor %}
+</ul>
+{% endblock %}

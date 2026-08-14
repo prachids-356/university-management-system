@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>My Exam Results</h2>
+<ul>
+    {% for result in results %}
+        <li>{{ result.exam.course.code }} - {{ result.exam.title }}: {{ result.obtained_marks }}</li>
+    {% empty %}
+        <li>No results.</li>
+    {% endfor %}
+</ul>
+{% endblock %}
