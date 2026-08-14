@@ -1,39 +1,68 @@
-# 🎓 University Management System (Tkinter GUI)
+# University Management System (Django Monolith)
 
-This is a Python-based University Management System built using **Tkinter GUI** and **OOP concepts**. It includes an interactive interface for managing students, faculty, and courses — with login authentication and role-based dashboards.
+End-to-end monolithic university management application with modules for users, academics, enrollment, exams, finance, and notifications.
 
-> **Built by:** Prachi Singh  
-> **Repository:** https://github.com/prachids-356/university-management-system
+## Features
 
----
+- Role-based authentication (Admin, Faculty, Student)
+- Admissions and faculty onboarding
+- Course creation, assignment, prerequisites, and capacity
+- Student enrollment with validations
+- Attendance marking and grading
+- Exam schedule and result entry
+- Fee invoice generation and payment status tracking
+- Internal JSON APIs for courses, enrollments, and invoices
+- Seed data command for quick setup
 
-## ✨ Features
+## Architecture
 
-- 🔐 **Login system** for Admin, Faculty, and Students
-- 👤 Add **Students**, **Faculty**, and **Courses**
-- 📚 Assign faculty to courses and enroll students with **prerequisite check**
-- 🧾 View structured data (course roster, enrolled students, assigned faculty)
-- 🖥️ Interactive and clean **Tkinter-based GUI**
+- `users` – auth, roles, profiles, dashboard/reports
+- `academics` – courses and prerequisites
+- `enrollment` – enrollments, attendance, grading workflow
+- `exams` – exams and results
+- `finance` – fee invoices and payment tracking
+- `notifications_app` – user notifications
+- `services` – domain validation/business rules
+- `domain` – decoupled core entities
 
----
+## Real Database Setup (PostgreSQL)
 
-## 🖼️ Screenshots
+1. Start PostgreSQL with Docker:
+   ```bash
+   docker compose up -d
+   ```
+2. Configure environment from `.env.example`:
+   ```bash
+   cp .env.example .env
+   ```
+3. Export env vars (or load `.env` in your shell), then:
+   ```bash
+   pip install -r requirements.txt
+   python manage.py migrate
+   python manage.py seed_data
+   python manage.py runserver
+   ```
 
-### 🔐 Login Screen
-![Login Screen](screenshots/login_screen.png)
+> For local lightweight runs, set `DB_ENGINE=sqlite`.
 
-### 🧭 Admin Dashboard
-![Dashboard](screenshots/dashboard_view.png)
+## Default Seeded Accounts
 
----
+- Admin: `admin / admin123`
+- Faculty: `faculty1 / fac123`
+- Student: `student1 / stud123`
 
-## 🚀 How to Run
+## Backup
 
-### ✅ Prerequisites
-- Python 3.x installed
-- Tkinter module (usually included with Python)
-
-### ▶️ Run the Project
-
+Create SQLite backups (when using SQLite):
 ```bash
-python university_gui.py
+python manage.py backup_db
+```
+
+## Tests and CI
+
+Run tests:
+```bash
+python manage.py test
+```
+
+GitHub Actions workflow is available at `.github/workflows/ci.yml`.
