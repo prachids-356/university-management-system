@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>University Management System</title>
+</head>
+<body>
+    <h1>University Management System</h1>
+    {% if user.is_authenticated %}
+        <p>Logged in as {{ user.username }} ({{ user.role }})</p>
+        <nav>
+            <a href="{% url 'dashboard' %}">Dashboard</a> |
+            <a href="{% url 'course_list' %}">Courses</a> |
+            <a href="{% url 'my_enrollments' %}">My Enrollments</a> |
+            <a href="{% url 'exam_list' %}">Exams</a> |
+            <a href="{% url 'invoice_list' %}">Finance</a> |
+            <a href="{% url 'notification_list' %}">Notifications</a> |
+            <a href="{% url 'reports' %}">Reports</a> |
+            <a href="{% url 'logout' %}">Logout</a>
+        </nav>
+    {% endif %}
+    {% for message in messages %}
+        <p>{{ message }}</p>
+    {% endfor %}
+    {% block content %}{% endblock %}
+</body>
+</html>

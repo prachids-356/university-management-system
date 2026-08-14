@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>My Enrollments</h2>
+<ul>
+    {% for item in enrollments %}
+        <li>{{ item.course.code }} - {{ item.course.title }} | {{ item.status }} | Grade: {{ item.grade|default:"-" }}</li>
+    {% empty %}
+        <li>No enrollments yet.</li>
+    {% endfor %}
+</ul>
+{% endblock %}

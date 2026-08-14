@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Admin Dashboard</h2>
+<ul>
+    <li>Total Students: {{ students }}</li>
+    <li>Total Faculty: {{ faculty }}</li>
+    <li>Total Courses: {{ courses }}</li>
+    <li>Pending Invoices: {{ pending_invoices }}</li>
+</ul>
+<p>
+    <a href="{% url 'admit_student' %}">Admit Student</a> |
+    <a href="{% url 'onboard_faculty' %}">Onboard Faculty</a> |
+    <a href="{% url 'course_create' %}">Create Course</a> |
+    <a href="{% url 'invoice_create' %}">Create Invoice</a> |
+    <a href="{% url 'exam_create' %}">Create Exam</a> |
+    <a href="{% url 'result_entry' %}">Enter Result</a>
+</p>
+{% endblock %}

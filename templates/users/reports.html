@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Reports</h2>
+<p>Paid invoices: {{ paid_invoices }}</p>
+<p>Pending invoices: {{ pending_invoices }}</p>
+<h3>Top courses by enrollment</h3>
+<ul>
+    {% for course in top_courses %}
+        <li>{{ course.code }} - {{ course.title }} ({{ course.total }})</li>
+    {% empty %}
+        <li>No data.</li>
+    {% endfor %}
+</ul>
+{% endblock %}

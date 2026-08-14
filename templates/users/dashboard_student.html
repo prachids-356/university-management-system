@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block content %}
+<h2>Student Dashboard</h2>
+<p><a href="{% url 'enroll_course' %}">Enroll in Course</a></p>
+<ul>
+    {% for item in enrollments %}
+        <li>{{ item.course.code }} - {{ item.course.title }} | {{ item.status }} | Grade: {{ item.grade|default:"-" }}</li>
+    {% empty %}
+        <li>No enrollments.</li>
+    {% endfor %}
+</ul>
+{% endblock %}
