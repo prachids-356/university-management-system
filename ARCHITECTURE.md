@@ -1,0 +1,188 @@
+# Architecture
+
+Two documents in one: **what exists today**, and **the roadmap** for turning this desktop
+application into a deployable web service. Nothing in the roadmap section is implemented yet — it is a
+design to agree on before building.
+
+---
+
+## 1. Today
+
+### Requirements this system satisfies
+
+| # | Requirement | Rule |
+|---|---|---|
+| R1 | Only authenticated users may use the system | username + PBKDF2-hashed password |
+| R2 | Permissions depend on role | admin = full CRUD, faculty = enroll + view, student = view |
+| R3 | Identifiers are unique | duplicate student/faculty/course IDs are rejected |
+| R4 | A student may only enroll in a course whose prerequisites they have **completed** | `Student.missing_prerequisites` |
+| R5 | A student cannot hold two active enrollments in one course | `Student.enroll` |
+| R6 | A course may not exceed its capacity, when one is set | `Course.is_full` |
+| R7 | A course has at most one assigned faculty member | `Faculty.assign_course` reassigns and detaches the previous owner |
+| R8 | Data survives a restart | `university/storage.py` |
+
+### Module boundaries
+
+```
+        gui.py (Tkinter)        cli.py (console)
+                \                  /
+                 \                /
+              university/models.py         <- all business rules live here
+                        |
+        university/auth.py    university/storage.py
+        (identity, RBAC)      (serialization)
+```
+
+- `models.py` has **no** knowledge of Tkinter, files or users. It raises `DomainError`;
+  callers decide how to display it.
+- `auth.py` owns credentials and the permission table; it has no knowledge of the domain.
+- `storage.py` is the only module that touches the filesystem for domain data.
+- Entry points are thin: they collect input, call the domain, and render the result.
+
+This split is what makes the roadmap below cheap — a web API replaces the entry points,
+not the core.
+
+---
+
+## 2. Roadmap: desktop app → web service
+
+Each phase is independently shippable and leaves the app working.
+
+### Phase 1 — Relational schema (replaces `storage.py`)
+
+SQLite first (zero setup, same SQL as Postgres), SQLAlchemy models, Alembic migrations.
+
+```
+person(id PK, name, email UNIQUE, created_at)
+student(person_id PK/FK -> person, major, enrolled_year)
+faculty(person_id PK/FK -> person, department)
+app_user(id PK, username UNIQUE, password_hash, salt, role, person_id FK NULL)
+
+term(id PK, name, starts_on, ends_on)
+course(id PK, code UNIQUE, title, credits, capacity)
+course_prerequisite(course_id FK, prereq_course_id FK, PK(course_id, prereq_course_id))
+course_offering(id PK, course_id FK, term_id FK, faculty_id FK NULL,
+                UNIQUE(course_id, term_id))
+enrollment(id PK, student_id FK, offering_id FK, status, grade, created_at,
+           UNIQUE(student_id, offering_id))
+```
+
+Notes on the shape:
+- `course_prerequisite` and `enrollment` are both many-to-many join tables. The current
+  in-memory model stores prerequisites as a list of strings, which is exactly what allowed
+  the whitespace-matching bug.
+- `course_offering` separates *the course in the catalog* from *the course being taught this term*,
+  which is what lets a student retake a course and lets faculty assignments change per term.
+- Indexes: `enrollment(student_id)`, `enrollment(offering_id)`, `course_offering(term_id)`.
+- The prerequisite rule becomes one query: a student may enroll when no row in
+  `course_prerequisite` for that course lacks a matching `enrollment` with `status='completed'`.
+
+### Phase 2 — Backend layers
+
+```
+api/        FastAPI routers — HTTP only, no rules
+services/   use cases (enroll_student, assign_faculty) — transactions, authorization
+domain/     today's models.py, unchanged rules
+repos/      SQLAlchemy queries — the only layer that knows SQL
+```
+
+Dependencies point inward; `domain/` imports nothing from the outer layers. The existing
+`tests/test_models.py` keeps passing untouched, which is the point of the layering.
+
+### Phase 3 — API contract
+
+Versioned under `/api/v1`; breaking changes ship as `/api/v2` while v1 stays for two releases.
+
+| Method | Path | Role | Notes |
+|---|---|---|---|
+| POST | `/api/v1/auth/login` | any | returns access + refresh JWT |
+| GET/POST | `/api/v1/students` | view / admin | paginated list |
+| GET/PATCH/DELETE | `/api/v1/students/{id}` | view / admin | |
+| GET/POST | `/api/v1/courses` | view / admin | |
+| GET/POST | `/api/v1/offerings` | view / admin | filter by `?term=` |
+| POST | `/api/v1/enrollments` | admin, faculty | 409 when a prerequisite is missing |
+| PATCH | `/api/v1/enrollments/{id}` | admin, faculty | set status/grade |
+| GET | `/api/v1/students/{id}/transcript` | owner or staff | |
+| GET | `/health`, `/metrics` | — | unversioned |
+
+Conventions: JSON only; errors as RFC 7807 problem documents carrying the `DomainError`
+message; cursor pagination; OpenAPI generated by FastAPI.
+
+### Phase 4 — Auth
+
+- Login returns a short-lived access JWT (15 min) and a rotating refresh token (7 days).
+- Claims: `sub` (user id), `role`, `person_id`.
+- A FastAPI dependency enforces the same permission strings the desktop app already uses,
+  so `auth.PERMISSIONS` moves over as-is.
+- Object-level check on top of role check: a student may read only their own transcript.
+- Passwords keep PBKDF2 (or move to Argon2id); rate-limit login by IP and username.
+
+### Phase 5 — Frontend
+
+React + TypeScript SPA against the API. Routes and flows:
+
+```
+/login                    -> role-aware redirect
+/admin      students | faculty | courses | offerings   (CRUD tables)
+/faculty    my courses -> roster -> record grade
+/student    catalog -> enroll (prereqs shown inline) | my schedule | transcript
+```
+
+Key flow — enrollment: catalog marks each course `eligible` / `missing prerequisites` /
+`full` from the API so the failure is visible *before* the click; the server re-checks and
+returns 409 as the authority.
+
+### Phase 6 — Testing strategy
+
+| Level | Tool | Scope | Target |
+|---|---|---|---|
+| Unit | pytest | domain rules, no I/O | every rule in R1-R8, ~90% of `domain/` |
+| Integration | pytest + test DB | services + repos, real transactions | each use case, happy + rejected path |
+| Contract | schemathesis | routes conform to OpenAPI | all endpoints |
+| E2E | Playwright | login → enroll → transcript, per role | the three golden paths |
+
+CI runs unit + integration on every PR; E2E on merge to main.
+
+### Phase 7 — Containerization
+
+Multi-stage build (builder installs deps into a venv, slim runtime copies it), non-root
+user, `HEALTHCHECK` hitting `/health`. `docker-compose.yml` for local dev: `api`,
+`postgres`, `web`. The current `Dockerfile` is the starting point.
+
+### Phase 8 — CI/CD
+
+Extend `.github/workflows/ci.yml`: lint + tests (already there) → build and push image
+tagged with the commit SHA → deploy to staging automatically → deploy to production on a
+tagged release, gated by a manual approval environment. Migrations run as a release step
+before the new image takes traffic; every migration must be backward compatible with the
+previous image so a rollback is safe.
+
+### Phase 9 — Deployment
+
+Managed container platform (Fly.io / Render / AWS ECS Fargate) plus managed Postgres —
+the workload is small and bursty around registration periods, and none of it justifies
+operating Kubernetes. Config strictly via environment variables; secrets in the platform's
+secret store, never in the image.
+
+### Phase 10 — Observability
+
+- **Logs**: structured JSON to stdout, with a request id propagated from the edge.
+- **Metrics**: Prometheus — request rate/latency/error rate per route, plus domain counters
+  (`enrollments_total`, `enrollments_rejected_total{reason}`) that would surface a broken
+  prerequisite rule immediately.
+- **Traces**: OpenTelemetry across request → service → SQL.
+- **Alerts**: 5xx rate > 1% for 5 min; p95 latency > 500 ms; DB connection saturation;
+  failed logins spiking.
+
+### Phase 11 — Scaling
+
+Honest ordering, cheapest first:
+1. Indexes from Phase 1 and a fixed connection pool — covers the realistic load.
+2. Run 2+ stateless API replicas behind the platform's load balancer; JWTs mean no sticky sessions.
+3. Cache the read-heavy course catalog (Redis, short TTL, invalidated on catalog writes).
+4. Only then: read replicas for reporting queries, and a queue for anything slow
+   (transcript PDFs, bulk imports).
+5. Registration-day spikes are a *write* burst on `enrollment`; handle them with row-level
+   locking on the offering's seat count, not with caching.
+
+Do not build 3-5 before there is measured pressure.
